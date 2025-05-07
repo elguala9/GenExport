@@ -15,5 +15,8 @@
   "main": "index.js",
   "bin": {
     "gen-exports": "./gen-exports.js"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3"
   }
 }
