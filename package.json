@@ -16,6 +16,9 @@
   "bin": {
     "gen-exports": "./gen-exports.js"
   },
+  "scripts": {
+    "publish": " npm publish --access public"
+  },
   "dependencies": {
     "fast-glob": "^3.3.3"
   }
