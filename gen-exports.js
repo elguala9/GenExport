@@ -4,7 +4,9 @@ const path = require('path');
 const fg = require('fast-glob');
 
 function printUsage() {
-  console.error(`Usage: gen-exports.js <buildDir> [-i <name1,name2,...>] [-p <pathToPackage.json>]`);
+  console.error(
+    `Usage: gen-exports.js <buildDir> [-i <name1,name2,...>] [-p <pathToPackage.json>]`
+  );
   process.exit(1);
 }
 
@@ -17,7 +19,7 @@ const buildDirArg = args[0];
 let excludeNames = [];
 let pkgPathArg;
 
-// Parse flags after buildDirArg
+// Process flags
 for (let i = 1; i < args.length; i++) {
   const arg = args[i];
   if ((arg === '-i' || arg === '--exclude') && args[i + 1]) {
@@ -32,6 +34,7 @@ for (let i = 1; i < args.length; i++) {
 
 const projectRoot = process.cwd();
 const distDir = path.resolve(projectRoot, buildDirArg);
+// Determine package.json path: custom or default
 const defaultPkgPath = path.join(projectRoot, 'package.json');
 const pkgPath = pkgPathArg
   ? path.resolve(projectRoot, pkgPathArg)
@@ -43,23 +46,23 @@ if (!fs.existsSync(distDir) || !fs.statSync(distDir).isDirectory()) {
   process.exit(1);
 }
 if (!fs.existsSync(pkgPath)) {
-  console.error(`Error: package.json not found at path: ${pkgPath}`);
+  console.error(`Error: package.json not found at: ${pkgPath}`);
   process.exit(1);
 }
 
+// Read package.json
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
 (async () => {
-  // Scan all .js files under dist (including nested dirs)
+  // Scan .js files in buildDir
   const jsFiles = await fg('**/*.js', { cwd: distDir });
 
-  // Build per-file exports, stripping "src/" prefix, skipping excludes
+  // Build exports map, skipping excluded names
   const exportsMap = jsFiles.reduce((out, jsFile) => {
-    const subpath = jsFile.replace(/\.js$/, ''); // e.g. "src/Serialization"
-    const baseName = path.basename(subpath);
-    if (excludeNames.includes(baseName)) {
-      return out;
-    }
+    const subpath = jsFile.replace(/\.js$/, '');
+    const name = path.basename(subpath);
+    if (excludeNames.includes(name)) return out;
+
     const key = `./${subpath}`;
     const jsPath = `./${buildDirArg}/${jsFile}`;
     const dtsFile = jsFile.replace(/\.js$/, '.d.ts');
@@ -75,13 +78,12 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
     return out;
   }, {});
 
-  // Replace exports in package.json
+  // Update package.json exports
   pkg.exports = exportsMap;
-
-  // Write back
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+
   console.log(
-    '✅ package.json exports updated:',
-    Object.keys(pkg.exports).join(', ')
+    '✅ Updated exports in', pkgPath,
+    '\nKeys:', Object.keys(exportsMap).join(', ')
   );
 })();
