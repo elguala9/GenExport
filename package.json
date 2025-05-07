@@ -1,0 +1,15 @@
+{
+  "name": "gen-exports",
+  "version": "1.0.0",
+  "description": "Generate the exports in the package.json",
+  "keywords": [
+    "exports"
+  ],
+  "license": "MIT",
+  "author": "Luca Gualandi",
+  "type": "commonjs",
+  "main": "index.js",
+  "bin": {
+    "gen-exports": "./gen-exports.js"
+  }
+}
