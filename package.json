@@ -5,6 +5,10 @@
   "keywords": [
     "exports"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elguala9/GenExport.git"
+  },
   "license": "MIT",
   "author": "Luca Gualandi",
   "type": "commonjs",
