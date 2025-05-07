@@ -1,6 +1,6 @@
 {
   "name": "gen-exports",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Generate the exports in the package.json",
   "keywords": [
     "exports"
@@ -15,9 +15,6 @@
   "main": "index.js",
   "bin": {
     "gen-exports": "./gen-exports.js"
-  },
-  "scripts": {
-    "publish": "npm publish --access public"
   },
   "dependencies": {
     "fast-glob": "^3.3.3"
