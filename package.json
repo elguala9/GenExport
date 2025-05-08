@@ -1,6 +1,6 @@
 {
   "name": "gen-exports",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Generate the exports in the package.json",
   "keywords": [
     "exports"
