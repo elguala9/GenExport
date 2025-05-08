@@ -152,14 +152,12 @@ function buildExportsMap(files, { distDir, pkgDir, excludeNames, placeholder }) 
     if (excludeNames.includes(name)) continue;
 
     const { js: jsFile, dts: dtsFile } = grouped[base] || {};
-    const fileToCheck = jsFile || dtsFile;
-    const absToCheck  = path.join(distDir, fileToCheck);
-    const content     = fs.readFileSync(absToCheck, 'utf8');
 
-    if (content.includes(placeholder)) {
-      console.warn(`⚠️  Skipping ${fileToCheck} (found placeholder "${placeholder}")`);
+    // i could have only js or only .d.ts
+    if (jsFile !== undefined && checkReserved(jsFile, distDir, placeholder)) 
       continue;
-    }
+    if (dtsFile !== undefined && checkReserved(dtsFile, distDir, placeholder)) 
+      continue;
 
     const key   = `./${base}`;
     const entry = {};
@@ -183,6 +181,18 @@ function buildExportsMap(files, { distDir, pkgDir, excludeNames, placeholder }) 
   }
 
   return exportsMap;
+}
+
+function checkReserved(fileToCheck, distDir, placeholder){
+
+    const absToCheck  = path.join(distDir, fileToCheck);
+    const content     = fs.readFileSync(absToCheck, 'utf8');
+
+    if (content.includes(placeholder)) {
+      console.warn(`⚠️  Skipping ${fileToCheck} (found placeholder "${placeholder}")`);
+      return true;
+    }
+    return false;
 }
 
 /**
