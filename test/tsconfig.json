@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declarationDir": "dist",    // qui scrive i .d.ts
+  },
+  "include": ["src"],
+  "exclude": ["dist"]
+}

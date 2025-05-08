@@ -1,0 +1,22 @@
+{
+  "name": "test",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "exports": {
+    "./Dummy": {
+      "import": "./dist/Dummy.js",
+      "require": "./dist/Dummy.js",
+      "types": "./dist/Dummy.d.ts"
+    },
+    "./DummyType": {
+      "types": "./dist/DummyType.d.ts"
+    }
+  }
+}
