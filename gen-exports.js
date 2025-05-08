@@ -9,7 +9,7 @@ const fg   = require('fast-glob');
  */
 function printUsage() {
   console.error(
-    `Usage: gen-exports.js <buildDir> [-i e1,name2,...] [-p path/to/package.json]`
+    `Usage: gen-exports.js <buildDir> [-i e1,name2,...] [-p path/to/package.json] [-e placeholder]`
   );
   process.exit(1);
 }
@@ -17,7 +17,12 @@ function printUsage() {
 /**
  * Parse CLI arguments into structured options.
  * @param {string[]} argv - process.argv.slice(2)
- * @returns {{ buildDirArg: string, excludeNames: string[], pkgPathArg?: string }}
+ * @returns {{
+ *   buildDirArg: string,
+ *   excludeNames: string[],
+ *   pkgPathArg?: string,
+ *   placeholder: string
+ * }}
  */
 function parseCliArgs(argv) {
   if (argv.length < 1) printUsage();
@@ -25,23 +30,30 @@ function parseCliArgs(argv) {
   const buildDirArg = argv[0];
   let excludeNames  = [];
   let pkgPathArg;
+  let placeholder   = '$RESERVED$';  // default
 
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
+
     if ((arg === '-i' || arg === '--exclude') && argv[i + 1]) {
       excludeNames = argv[++i]
         .split(',')
         .map(s => s.trim())
         .filter(Boolean);
+
     } else if ((arg === '-p' || arg === '--pkg') && argv[i + 1]) {
       pkgPathArg = argv[++i];
+
+    } else if ((arg === '-e' || arg === '--exclude-placeholder') && argv[i + 1]) {
+      placeholder = argv[++i];
+
     } else {
       console.error(`Unknown argument: ${arg}`);
       printUsage();
     }
   }
 
-  return { buildDirArg, excludeNames, pkgPathArg };
+  return { buildDirArg, excludeNames, pkgPathArg, placeholder };
 }
 
 /**
@@ -56,7 +68,6 @@ function findNearestPackageJson(startDir, rootDir) {
   while (true) {
     const candidate = path.join(dir, 'package.json');
     if (fs.existsSync(candidate)) return candidate;
-    // stop if we've reached the specified root or filesystem root
     if (dir === rootDir || path.dirname(dir) === dir) break;
     dir = path.dirname(dir);
   }
@@ -70,27 +81,23 @@ function findNearestPackageJson(startDir, rootDir) {
  * @returns {{ pkgPath: string, pkgDir: string, distDir: string }}
  */
 function resolvePaths(buildDirArg, pkgPathArg) {
-  const cwd            = process.cwd();
-  const buildPath      = path.resolve(cwd, buildDirArg);
-  const rootPkgPath    = path.join(cwd, 'package.json');
+  const cwd         = process.cwd();
+  const buildPath   = path.resolve(cwd, buildDirArg);
+  const rootPkgPath = path.join(cwd, 'package.json');
 
-  // ensure our build folder actually exists
   if (!fs.existsSync(buildPath) || !fs.statSync(buildPath).isDirectory()) {
     console.error(`Error: build directory not found or not a directory: ${buildPath}`);
     process.exit(1);
   }
 
-  // choose package.json
   let pkgPath;
   if (pkgPathArg) {
-    // explicit override
     pkgPath = path.resolve(cwd, pkgPathArg);
     if (!fs.existsSync(pkgPath)) {
       console.error(`Error: package.json not found at override path: ${pkgPath}`);
       process.exit(1);
     }
   } else {
-    // auto-detect nearest package.json above build folder
     const found = findNearestPackageJson(buildPath, cwd);
     pkgPath = found || rootPkgPath;
     if (!fs.existsSync(pkgPath)) {
@@ -100,13 +107,13 @@ function resolvePaths(buildDirArg, pkgPathArg) {
   }
 
   const pkgDir  = path.dirname(pkgPath);
-  const distDir = buildPath;  // we always glob inside the explicit build path
+  const distDir = buildPath;
 
   return { pkgPath, pkgDir, distDir };
 }
 
 /**
- * Read and parse a JSON file.
+ * Read and parse JSON from disk.
  * @param {string} filePath
  * @returns {any}
  */
@@ -115,16 +122,16 @@ function readJson(filePath) {
 }
 
 /**
- * Write JSON back to disk with 2-space formatting + newline.
+ * Write object as JSON to disk (2-space + newline).
  * @param {string} filePath
- * @param {any}     obj
+ * @param {any} obj
  */
 function writeJson(filePath, obj) {
   fs.writeFileSync(filePath, JSON.stringify(obj, null, 2) + '\n');
 }
 
 /**
- * Asynchronously list all .js files under distDir.
+ * Get all .js files under distDir.
  * @param {string} distDir
  * @returns {Promise<string[]>}
  */
@@ -143,23 +150,41 @@ function makeRelativePath(pkgDir, absolutePath) {
 }
 
 /**
- * Build the "exports" map for package.json given JS files.
- * @param {string[]}    jsFiles       - paths *inside* distDir
- * @param {{ distDir: string, pkgDir: string, excludeNames: string[] }} opts
+ * Build the "exports" map, skipping any file whose content
+ * includes the given placeholder or whose basename is excluded.
+ *
+ * @param {string[]} jsFiles              - list of paths inside distDir
+ * @param {{
+ *   distDir: string,
+ *   pkgDir: string,
+ *   excludeNames: string[],
+ *   placeholder: string
+ * }} opts
  * @returns {Record<string,object>}
  */
-function buildExportsMap(jsFiles, { distDir, pkgDir, excludeNames }) {
+function buildExportsMap(jsFiles, { distDir, pkgDir, excludeNames, placeholder }) {
   return jsFiles.reduce((out, jsFile) => {
-    const subpath = jsFile.replace(/\.js$/, '');      // e.g. "index" or "lib/foo"
-    const name    = path.basename(subpath);           // e.g. "index" or "foo"
-    if (excludeNames.includes(name)) return out;      // skip if excluded
+    const subpath = jsFile.replace(/\.js$/, '');
+    const name    = path.basename(subpath);
 
-    const key   = `./${subpath}`;                     // export key
-    const absJs = path.join(distDir, jsFile);         // e.g. /.../packages/iermes/dist/index.js
-    const relJs = makeRelativePath(pkgDir, absJs);    // e.g. dist/index.js
-    const jsPath= `./${relJs}`;                       // "./dist/index.js"
+    // Skip by name
+    if (excludeNames.includes(name)) return out;
 
-    // look for accompanying .d.ts
+    const absJs = path.join(distDir, jsFile);
+
+    // Skip if file contains placeholder
+    const content = fs.readFileSync(absJs, 'utf8');
+    if (content.includes(placeholder)) {
+      console.warn(`⚠️  Skipping ${jsFile} (found placeholder "${placeholder}")`);
+      return out;
+    }
+
+    // Build entry
+    const key    = `./${subpath}`;
+    const relJs  = makeRelativePath(pkgDir, absJs);
+    const jsPath = `./${relJs}`;
+
+    // Look for .d.ts next to it
     const dtsFile = jsFile.replace(/\.js$/, '.d.ts');
     const absDts  = path.join(distDir, dtsFile);
     const types   = fs.existsSync(absDts)
@@ -172,22 +197,23 @@ function buildExportsMap(jsFiles, { distDir, pkgDir, excludeNames }) {
 }
 
 /**
- * Main entrypoint: tie everything together.
+ * Main entrypoint.
  */
 async function main() {
-  const { buildDirArg, excludeNames, pkgPathArg } = parseCliArgs(process.argv.slice(2));
+  const { buildDirArg, excludeNames, pkgPathArg, placeholder } =
+    parseCliArgs(process.argv.slice(2));
 
-  // pick/build folder and package root
   const { pkgPath, pkgDir, distDir } = resolvePaths(buildDirArg, pkgPathArg);
+  const pkg                          = readJson(pkgPath);
+  const jsFiles                      = await getJsFiles(distDir);
 
-  // load package.json
-  const pkg = readJson(pkgPath);
+  pkg.exports = buildExportsMap(jsFiles, {
+    distDir,
+    pkgDir,
+    excludeNames,
+    placeholder
+  });
 
-  // find built JS files
-  const jsFiles = await getJsFiles(distDir);
-
-  // construct exports and write back
-  pkg.exports = buildExportsMap(jsFiles, { distDir, pkgDir, excludeNames });
   writeJson(pkgPath, pkg);
 
   console.log(
@@ -196,7 +222,6 @@ async function main() {
   );
 }
 
-// run, catching any uncaught errors
 main().catch(err => {
   console.error('Unexpected error:', err);
   process.exit(1);
